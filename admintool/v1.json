@@ -1,0 +1,96 @@
+{
+  "Comment": "A secure workflow to grant admin access",
+  "StartAt": "choice- add more time or NEW",
+  "States": {
+    "choice- add more time or NEW": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.session",
+          "IsPresent": true,
+          "Next": "wait an hour"
+        }
+      ],
+      "Default": "lambda- add to admin role"
+    },
+    "lambda- add to admin role": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "arn:aws:lambda:us-east-1:012345678901:function:modify_role",
+        "Payload": {
+          "op_type": "add",
+          "user_arn.$": "$.user_arn"
+        }
+      },
+      "Next": "lambda- create jira ticket"
+    },
+    "lambda- create jira ticket": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "arn:aws:lambda:us-east-1:012345678901:function:jira_handler",
+        "Payload": {
+          "op_type": "create"
+        }
+      },
+      "Next": "wait an hour"
+    },
+    "wait an hour": {
+      "Type": "Wait",
+      "Seconds": 3600,
+      "Next": "choice- wait again or proceed"
+    },
+    "choice- wait again or proceed": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.session",
+          "IsPresent": true,
+          "Next": "wait an hour"
+        }
+      ],
+      "Default": "lambda- remove from role"
+    },
+    "lambda- remove from role": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "ResultPath": null,
+      "Parameters": {
+        "FunctionName": "arn:aws:lambda:us-east-1:012345678901:function:modify_role",
+        "Payload": {
+          "op_type": "remove",
+          "user_arn.$": "$.user_arn"
+        }
+      },
+      "Next": "wait 20 min for cloudtrail"
+    },
+    "wait 20 min for cloudtrail": {
+      "Type": "Wait",
+      "Seconds": 1200,
+      "Next": "lambda- get cloudtrail logs"
+    },
+    "lambda- get cloudtrail logs": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "arn:aws:lambda:us-east-1:012345678901:function:cloudtrail_lookup_events",
+        "Payload": {
+          "user_arn.$": "$.user_arn"
+        }
+      },
+      "Next": "lambda- add jira cloudtrail comments"
+    },
+    "lambda- add jira cloudtrail comments": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "arn:aws:lambda:us-east-1:012345678901:function:jira_handler",
+        "Payload": {
+          "op_type": "add_comments"
+        }
+      },
+      "End": true
+    }
+  }
+}
